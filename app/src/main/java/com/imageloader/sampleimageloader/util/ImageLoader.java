@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.util.LruCache;
+import android.widget.ImageView;
 
 import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
@@ -88,5 +89,45 @@ public class ImageLoader {
             }
         }
         return mInstance;
+    }
+
+    public void loadImage(String path, final ImageView imageView){
+        imageView.setTag(path);
+        if (mUIHandler==null){
+            mUIHandler = new Handler(){
+                @Override
+                public void handleMessage(Message msg) {
+                    //获取图片，为imageView回调设置图片
+                    ImageBeanHolder holder = (ImageBeanHolder) msg.obj;
+                    Bitmap bm = holder.bitmap;
+                    ImageView imageView = holder.imageView;
+                    String path = holder.path;
+                    if (imageView.getTag().toString().equals(path)){
+                        imageView.setImageBitmap(bm);
+                    }
+                }
+            };
+        }
+
+        Bitmap bm = getBitmapFromLruCache(path);
+        if (bm!=null){
+            Message message = Message.obtain();
+            ImageBeanHolder holder = new ImageBeanHolder();
+            holder.bitmap = bm;
+            holder.path = path;
+            holder.imageView = imageView;
+            message.obj = holder;
+            mUIHandler.sendMessage(message);
+
+        }
+    }
+
+    private Bitmap getBitmapFromLruCache(String key) {
+        return mLruCache.get(key);
+    }
+    private class ImageBeanHolder{
+        Bitmap bitmap;
+        ImageView imageView;
+        String path;
     }
 }
