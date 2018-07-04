@@ -2,6 +2,7 @@ package com.imageloader.sampleimageloader.util;
 
 import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -107,7 +108,7 @@ public class ImageLoader {
         return mInstance;
     }
 
-    public void loadImage(String path, final ImageView imageView){
+    public void loadImage(final String path, final ImageView imageView){
         imageView.setTag(path);
         if (mUIHandler==null){
             mUIHandler = new Handler(){
@@ -141,10 +142,42 @@ public class ImageLoader {
                    //加载图片
                    //图片压缩
                     //1.获取图片需要显示的大小
-                    ImageSize imageViewSize = getImageViewSize(imageView);
+                    ImageSize imageSize = getImageViewSize(imageView);
+                    //2.压缩图片
+                    Bitmap bm = decodeSampledBitmapFromPath(path,imageSize.with,imageSize.height);
                 }
             });
         }
+    }
+
+    /**
+     * 根据图片需要显示的宽和高压缩
+     * @param path
+     * @param with
+     * @param height
+     * @return
+     */
+    private Bitmap decodeSampledBitmapFromPath(String path, int with, int height) {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, options);
+        options.inSampleSize = caculateInSampleSize(options,with,height);
+        //inSampleSize再次解析
+        options.inJustDecodeBounds = false;
+        Bitmap bitmap = BitmapFactory.decodeFile(path, options);
+        return bitmap;
+    }
+
+    private int caculateInSampleSize(BitmapFactory.Options options, int reqWith, int reqHeight) {
+        int with = options.outWidth;
+        int height = options.outHeight;
+        int inSampleSize = 1;
+        if (with>reqHeight||height>reqHeight){
+            int widthRound = Math.round(with * 1.0f / reqWith);
+            int heightRound = Math.round(height * 1.0f / reqHeight);
+            inSampleSize = Math.max(widthRound,heightRound);
+        }
+        return inSampleSize;
     }
 
     /**
