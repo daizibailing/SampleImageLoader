@@ -14,6 +14,7 @@ import android.widget.ImageView;
 import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 
 /**
@@ -25,6 +26,7 @@ public class ImageLoader {
     private LruCache<String,Bitmap> mLruCache;
     private ExecutorService mThreadPool;
     private static final int DEAFULT_THREAD_COUNT=1;
+
     /**
      * 队列的调度方式
      */
@@ -35,6 +37,7 @@ public class ImageLoader {
      */
     private Thread mPoolThread;
     private Handler mPoolThreadHandler;
+    private Semaphore mSemphorePoolThreadHandler = new Semaphore(0);
     /**
      * UI线程中的Handler
      */
@@ -64,6 +67,7 @@ public class ImageLoader {
                         mThreadPool.execute(getTask());
                     }
                 };
+                mSemphorePoolThreadHandler.release();
                 Looper.loop();
             }
         };
@@ -128,13 +132,7 @@ public class ImageLoader {
         //LruCache 查找 找到返回 找不到放入Task队列 且发送通知去体现后台轮询线程
         Bitmap bm = getBitmapFromLruCache(path);
         if (bm!=null){
-            Message message = Message.obtain();
-            ImageBeanHolder holder = new ImageBeanHolder();
-            holder.bitmap = bm;
-            holder.path = path;
-            holder.imageView = imageView;
-            message.obj = holder;
-            mUIHandler.sendMessage(message);
+            refreshBitmap(bm, path, imageView);
         }else {
             addTasks(new Runnable() {
                 @Override
@@ -145,8 +143,34 @@ public class ImageLoader {
                     ImageSize imageSize = getImageViewSize(imageView);
                     //2.压缩图片
                     Bitmap bm = decodeSampledBitmapFromPath(path,imageSize.with,imageSize.height);
+                    //3.图片加入到缓存
+                    addBitmapToLruCache(path,bm);
+                    refreshBitmap(bm, path, imageView);
                 }
             });
+        }
+    }
+
+    private void refreshBitmap(Bitmap bm, String path, ImageView imageView) {
+        Message message = Message.obtain();
+        ImageBeanHolder holder = new ImageBeanHolder();
+        holder.bitmap = bm;
+        holder.path = path;
+        holder.imageView = imageView;
+        message.obj = holder;
+        mUIHandler.sendMessage(message);
+    }
+
+    /**
+     * 图片加入LruCache
+     * @param path
+     * @param bm
+     */
+    private void addBitmapToLruCache(String path, Bitmap bm) {
+        if (getBitmapFromLruCache(path)==null){
+            if (bm!=null){
+                mLruCache.put(path,bm);
+            }
         }
     }
 
@@ -216,8 +240,15 @@ public class ImageLoader {
         return imageSize;
     }
 
-    private void addTasks(Runnable runnable) {
+    private synchronized void addTasks(Runnable runnable) {
         mTaskQueue.add(runnable);
+        try {
+            if (mPoolThreadHandler==null){
+                mSemphorePoolThreadHandler.acquire();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         mPoolThreadHandler.sendEmptyMessage(0);
     }
 
